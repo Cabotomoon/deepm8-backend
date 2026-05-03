@@ -32,7 +32,7 @@ export class StockfishService {
   private initializeEngine(): void {
     try {
       // Spawn Stockfish process
-      this.engine = spawn('stockfish');
+      this.engine = spawn('/usr/games/stockfish');
 
       this.engine.stdout?.on('data', (data) => {
         const output = data.toString();
