@@ -1,8 +1,8 @@
-# DeepM8 Backend - Railway Deployment
-FROM node:18-alpine
+# DeepM8 Backend - Railway Deployment (Fixed)
+FROM node:18-bullseye
 
 # Install Stockfish
-RUN apk add --no-cache stockfish
+RUN apt-get update && apt-get install -y stockfish && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -10,14 +10,17 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --production
+# Install ALL dependencies (including dev dependencies for build)
+RUN npm install
 
 # Copy source code
 COPY . .
 
 # Build TypeScript
 RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm prune --production
 
 # Expose port
 EXPOSE 3001
