@@ -20,7 +20,13 @@ const openai = new OpenAI({
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'https://*.seaverse.com'],
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://*.seaverse.com',
+    'https://deepm8-frontend.vercel.app',  // ✅ Added Vercel frontend
+    'https://*.vercel.app'  // ✅ Allow all Vercel preview deployments
+  ],
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
