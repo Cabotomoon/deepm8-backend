@@ -11,7 +11,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // 🔒 Secure OpenAI API key - NEVER expose to frontend
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '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';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+if (!OPENAI_API_KEY) {
+  console.error('❌ FATAL ERROR: OPENAI_API_KEY environment variable is not set');
+  console.error('Please set OPENAI_API_KEY in Railway environment variables');
+  process.exit(1);
+}
 
 // Initialize OpenAI client
 const openai = new OpenAI({
