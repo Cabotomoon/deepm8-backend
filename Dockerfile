@@ -1,34 +1,20 @@
-# Production-ready Node.js image for Railway
+# DeepM8 Backend - Railway Production Build
 FROM node:18-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files first (for caching)
 COPY package*.json ./
 
-# Install production dependencies
-# Use npm ci for faster, reproducible builds
-RUN npm ci --only=production
+# Install dependencies
+RUN npm install --omit=dev && npm cache clean --force
 
-# Copy application code
+# Copy application source
 COPY index.js ./
-COPY .env* ./ 2>/dev/null || true
 
-# Create a non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
-    chown -R nodejs:nodejs /app
-
-# Switch to non-root user
-USER nodejs
-
-# Railway automatically sets PORT env var
+# Railway sets PORT automatically, expose default
 EXPOSE 3001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:${PORT:-3001}/health', (r) => {if(r.statusCode === 200) process.exit(0); else process.exit(1);})"
-
-# Start the application
+# Start the server
 CMD ["node", "index.js"]
