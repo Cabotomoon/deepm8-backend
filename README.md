@@ -1,308 +1,278 @@
-# 🚂 DeepM8 Backend - Railway Deployment Guide
+# DeepM8 Backend API
 
-Backend server for DeepM8 Chess Training Platform with Stockfish analysis, multiplayer, and puzzle generation.
+Backend seguro para DeepM8 Chess AI que protege el token de OpenAI.
 
-## 🎯 Features
+## 🔒 Arquitectura de Seguridad
 
-- ✅ **Stockfish Analysis** - Deep position analysis with evaluation
-- ✅ **Best Move Recommendations** - AI-powered move suggestions
-- ✅ **Puzzle Generation** - Dynamic tactical puzzle creation
-- ✅ **Multiplayer** - Real-time chess games with Socket.io
-- ✅ **Move Validation** - Verify move quality and accuracy
+```
+Frontend (React) → Backend API (/api/chat) → OpenAI
+                   \\\[Token seguro aquí]
+```
 
-## 📦 Tech Stack
+El token de OpenAI **NUNCA** se expone al frontend, manteniéndolo seguro de accesos no autorizados.
 
-- **Runtime**: Node.js 18+
-- **Framework**: Express + TypeScript
-- **WebSockets**: Socket.io
-- **Chess Engine**: Stockfish 16
-- **Deployment**: Railway (Docker)
+\---
 
----
+## 🚀 Inicio Rápido
 
-## 🚀 Deploy to Railway
-
-### Step 1: Prepare Repository
+### 1\. Instalar dependencias
 
 ```bash
-# Create Git repository
-cd deepm8-backend
-git init
-git add .
-git commit -m "Initial commit: DeepM8 Backend"
-
-# Push to GitHub
-git remote add origin https://github.com/TU_USUARIO/deepm8-backend.git
-git branch -M main
-git push -u origin main
-```
-
-### Step 2: Deploy on Railway
-
-1. **Go to [railway.app](https://railway.app)**
-2. **Click "New Project"**
-3. **Select "Deploy from GitHub repo"**
-4. **Choose `deepm8-backend` repository**
-5. **Railway will auto-detect Dockerfile and deploy**
-
-### Step 3: Configure Environment Variables
-
-In Railway dashboard, go to **Variables** and add:
-
-```env
-NODE_ENV=production
-FRONTEND_URL=https://your-vercel-app.vercel.app
-PORT=3001
-```
-
-### Step 4: Get Your Railway URL
-
-After deployment, Railway will provide a URL like:
-```
-https://deepm8-backend-production.up.railway.app
-```
-
-**Copy this URL** - you'll need it for the frontend configuration.
-
----
-
-## 🌐 Connect Frontend to Backend
-
-### Update Frontend Environment Variables
-
-In your Vercel project, add:
-
-```env
-VITE_BACKEND_URL=https://deepm8-backend-production.up.railway.app
-VITE_SOCKET_URL=https://deepm8-backend-production.up.railway.app
-```
-
-### Update Frontend Code
-
-Update your frontend to use environment variables:
-
-```typescript
-// src/config/api.ts
-export const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
-```
-
----
-
-## 📡 API Endpoints
-
-### Analysis & Recommendations
-
-```bash
-POST /api/analysis/position
-Body: { fen: string, depth?: number }
-Response: { bestMove, evaluation, depth, pv, mate? }
-
-POST /api/recommendations/best-move
-Body: { fen: string, depth?: number }
-Response: { move: string, evaluation: number }
-
-POST /api/analysis/validate-move
-Body: { fen: string, move: string, depth?: number }
-Response: { isCorrect, evaluation, difference, quality }
-```
-
-### Puzzle Generation
-
-```bash
-POST /api/puzzles/generate
-Body: { category: string, count?: number, minDepth?: number }
-Response: TacticalPuzzle[]
-
-POST /api/puzzles/validate
-Body: { fen: string, move: string, depth?: number }
-Response: { isCorrect, bestMove, evaluation, feedback }
-```
-
-### Health Check
-
-```bash
-GET /health
-Response: { status: 'ok', service: 'deepm8-backend', timestamp }
-```
-
----
-
-## 🎮 Socket.io Events (Multiplayer)
-
-### Client → Server
-
-```typescript
-socket.emit('join-queue', { rating?, timeControl? });
-socket.emit('leave-queue');
-socket.emit('make-move', { roomId, move, fen });
-socket.emit('resign');
-socket.emit('offer-draw');
-socket.emit('draw-response', { accept: boolean });
-socket.emit('chat-message', { roomId, message });
-```
-
-### Server → Client
-
-```typescript
-socket.on('queue-joined', { position, playersInQueue });
-socket.on('game-started', { roomId, color, opponent, timeControl });
-socket.on('opponent-move', { move, fen });
-socket.on('move-accepted', { move, fen });
-socket.on('game-ended', { result, reason });
-socket.on('opponent-disconnected');
-socket.on('draw-offered', { from });
-socket.on('draw-declined');
-socket.on('chat-message', { message, from });
-```
-
----
-
-## 🧪 Local Development
-
-```bash
-# Install dependencies
+cd server
 npm install
+```
 
-# Start development server
-npm run dev
+### 2\. Configurar variables de entorno
 
-# Build for production
-npm run build
+### 3\. Iniciar el servidor
 
-# Start production server
+```bash
 npm start
 ```
 
----
+Deberías ver:
 
-## 🐳 Docker (Local Testing)
+```
+🚀 DeepM8 Backend API Server
+📡 Server running on http://localhost:3001
+🔒 OpenAI API Key: \\\*\\\*\\\*6fA8A
+⏰ Started at: \\\[timestamp]
 
-```bash
-# Build image
-docker build -t deepm8-backend .
-
-# Run container
-docker run -p 3001:3001 \
-  -e NODE_ENV=production \
-  -e FRONTEND_URL=http://localhost:5173 \
-  deepm8-backend
-
-# Test health endpoint
-curl http://localhost:3001/health
+Available endpoints:
+  GET  /health       - Health check
+  POST /api/chat     - Chat completions
 ```
 
----
+\---
 
-## 📊 Railway Monitoring
+## 📡 Endpoints API
 
-### View Logs
+### **GET /health**
+
+Health check del servidor.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "service": "DeepM8 Backend API",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+\---
+
+### **POST /api/chat**
+
+Completions de chat con OpenAI (token seguro en backend).
+
+**Request Body:**
+
+```json
+{
+  "messages": \\\[
+    { "role": "system", "content": "Eres un entrenador de ajedrez..." },
+    { "role": "user", "content": "¿Cómo mejoro mi apertura?" }
+  ],
+  "model": "gpt-4o-mini",
+  "temperature": 0.7,
+  "maxTokens": 1000
+}
+```
+
+**Response:**
+
+```json
+{
+  "content": "Para mejorar tu apertura...",
+  "model": "gpt-4o-mini",
+  "usage": {
+    "promptTokens": 50,
+    "completionTokens": 200,
+    "totalTokens": 250
+  }
+}
+```
+
+**Errores:**
+
+* `400` - Request inválido
+* `429` - Rate limit excedido
+* `500` - Error interno del servidor
+
+\---
+
+## 🎮 Iniciar Frontend + Backend
+
+### Opción 1: Dos terminales separadas
+
+**Terminal 1 - Backend:**
+
 ```bash
-# Install Railway CLI
-npm install -g @railway/cli
+cd server
+npm start
+```
 
-# Login
+**Terminal 2 - Frontend:**
+
+```bash
+cd ..
+npm run dev
+```
+
+### Opción 2: Script combinado (agregar a package.json raíz)
+
+```json
+{
+  "scripts": {
+    "dev:backend": "cd server \\\&\\\& npm start",
+    "dev:frontend": "vite",
+    "dev": "concurrently \\\\"npm:dev:backend\\\\" \\\\"npm:dev:frontend\\\\""
+  }
+}
+```
+
+\---
+
+## 🌐 Despliegue en Producción
+
+### Backend (Opciones)
+
+#### **1. Railway.app** (Recomendado - Gratis para empezar)
+
+```bash
+# Instalar Railway CLI
+npm i -g @railway/cli
+
+# Deploy
+cd server
 railway login
-
-# Link project
-railway link
-
-# View logs
-railway logs
+railway init
+railway up
 ```
 
-### Metrics
-- Go to Railway Dashboard → Metrics
-- Monitor CPU, Memory, Network usage
-- Check deployment history
+Railway detectará automáticamente tu `package.json` y variables de entorno.
 
----
+#### **2. Render.com** (Gratis)
 
-## ⚙️ Scaling on Railway
+1. Conecta tu repositorio
+2. Selecciona "Web Service"
+3. Build command: `cd server \\\&\\\& npm install`
+4. Start command: `cd server \\\&\\\& npm start`
+5. Agrega las variables de entorno en la configuración
 
-Railway automatically scales based on traffic. For better performance:
+#### **3. Vercel Serverless**
 
-1. **Upgrade Plan** - Railway Pro ($20/mo) for better resources
-2. **Horizontal Scaling** - Railway can auto-scale instances
-3. **Caching** - Add Redis for puzzle caching (optional)
+Crea `server/api/chat.js`:
 
----
+```javascript
+import { OpenAI } from 'openai';
 
-## 🔒 Security Best Practices
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-1. **CORS** - Only allow your Vercel domain
-2. **Rate Limiting** - Add express-rate-limit (recommended)
-3. **Environment Variables** - Never commit .env files
-4. **HTTPS Only** - Railway provides SSL automatically
+  const openai = new OpenAI({ apiKey: process.env.OPENAI\\\_API\\\_KEY });
+  const { messages, model, temperature, maxTokens } = req.body;
 
----
+  try {
+    const completion = await openai.chat.completions.create({
+      model: model || 'gpt-4o-mini',
+      messages,
+      temperature: temperature || 0.7,
+      max\\\_tokens: maxTokens || 1000,
+    });
 
-## 🐛 Troubleshooting
+    res.json({
+      content: completion.choices\\\[0].message.content,
+      model: completion.model,
+      usage: {
+        promptTokens: completion.usage.prompt\\\_tokens,
+        completionTokens: completion.usage.completion\\\_tokens,
+        totalTokens: completion.usage.total\\\_tokens,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+```
 
-### Stockfish not working
+### Frontend
+
+Actualiza `.env` con la URL del backend en producción:
+
+```env
+VITE\\\_BACKEND\\\_URL=https://tu-backend-en-produccion.com
+```
+
+\---
+
+## 🔧 Desarrollo
+
+### Modo watch (auto-restart en cambios)
+
 ```bash
-# Verify Stockfish is installed in container
-railway run stockfish
-
-# Check logs
-railway logs --tail 100
+cd server
+npm run dev
 ```
 
-### Socket.io connection failed
+### Testing del endpoint
+
 ```bash
-# Verify CORS settings in server.ts
-# Check VITE_SOCKET_URL in frontend
-# Ensure WebSocket support is enabled on Railway
+# Health check
+curl http://localhost:3001/health
+
+# Chat request
+curl -X POST http://localhost:3001/api/chat \\\\
+  -H "Content-Type: application/json" \\\\
+  -d '{
+    "messages": \\\[
+      {"role": "user", "content": "¿Qué es el gambito de dama?"}
+    ]
+  }'
 ```
 
-### High CPU usage
-```bash
-# Reduce Stockfish depth in API calls
-# Add request throttling
-# Monitor with railway metrics
+\---
+
+## 📦 Estructura de Archivos
+
+```
+server/
+├── index.js           # Servidor Express principal
+├── package.json       # Dependencias del backend
+├── .env              # Variables de entorno (NO subir a git)
+├── .gitignore        # Ignora .env y node\\\_modules
+└── README.md         # Esta documentación
+
+Frontend actualizado:
+src/services/llmService.ts  # Ahora llama al backend en lugar de OpenAI directo
+.env                        # URL del backend
 ```
 
----
+\---
 
-## 📈 Performance Optimization
+## 🔐 Seguridad
 
-1. **Puzzle Caching**
-   ```typescript
-   // Cache generated puzzles in memory or Redis
-   const puzzleCache = new Map<string, Puzzle[]>();
-   ```
+✅ **Token protegido**: Nunca se expone al frontend
+✅ **CORS configurado**: Solo orígenes permitidos
+✅ **Rate limiting**: Previene abuso (básico - mejorar en producción)
+✅ **Validación de input**: Verifica requests antes de procesar
+✅ **.env en .gitignore**: No se sube al repositorio
 
-2. **Stockfish Pool**
-   ```typescript
-   // Use multiple Stockfish instances for concurrent requests
-   class StockfishPool { ... }
-   ```
+### Mejoras de seguridad recomendadas para producción:
 
-3. **Rate Limiting**
-   ```typescript
-   import rateLimit from 'express-rate-limit';
-   const limiter = rateLimit({ windowMs: 60000, max: 100 });
-   app.use('/api/', limiter);
-   ```
+1. **Rate limiting robusto**: Usar `express-rate-limit`
+2. **Autenticación**: Agregar tokens JWT o API keys por usuario
+3. **Logging**: Implementar Winston o similar
+4. **Monitoring**: Agregar Sentry o similar
+5. **HTTPS**: Forzar SSL en producción
 
----
+\---
 
-## 🎯 Next Steps
+## 📝 Licencia
 
-1. ✅ Deploy backend to Railway
-2. ✅ Get Railway URL
-3. ✅ Configure frontend environment variables
-4. ✅ Deploy frontend to Vercel
-5. ✅ Test end-to-end integration
+MIT - DeepM8 Chess AI
 
----
-
-## 📞 Support
-
-- **Railway Docs**: https://docs.railway.app
-- **Socket.io Docs**: https://socket.io/docs/v4
-- **Stockfish**: https://stockfishchess.org
-
----
-
-**Built with ❤️ for DeepM8 Chess Training Platform**
