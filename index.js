@@ -53,11 +53,35 @@ app.post('/api/chat', async (req, res) => {
       maxTokens = 1000
     } = req.body;
 
-    // Validation
+    console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
+
+    // Enhanced validation
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      console.error('❌ Validation failed: messages array is invalid');
       return res.status(400).json({
         error: 'Invalid request',
-        message: 'messages array is required'
+        message: 'messages array is required and must not be empty'
+      });
+    }
+
+    // Validate each message has required fields
+    const invalidMessages = messages.filter((msg, index) => {
+      const isValid = msg &&
+                      typeof msg === 'object' &&
+                      msg.role &&
+                      typeof msg.content === 'string' &&
+                      msg.content.trim().length > 0;
+      if (!isValid) {
+        console.error(`❌ Invalid message at index ${index}:`, msg);
+      }
+      return !isValid;
+    });
+
+    if (invalidMessages.length > 0) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'All messages must have role and content (non-empty string)',
+        details: `${invalidMessages.length} invalid message(s) found`
       });
     }
 
@@ -81,7 +105,10 @@ app.post('/api/chat', async (req, res) => {
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
       model,
-      messages,
+      messages: messages.map(msg => ({
+        role: msg.role,
+        content: String(msg.content).trim()
+      })),
       temperature,
       max_tokens: maxTokens,
     });
@@ -132,7 +159,8 @@ app.post('/api/chat', async (req, res) => {
     // Generic error
     res.status(500).json({
       error: 'Internal server error',
-      message: 'Failed to process chat request'
+      message: 'Failed to process chat request',
+      details: error.message
     });
   }
 });
