@@ -1,13 +1,17 @@
 /**
  * DeepM8 Backend API Server
- * Securely handles OpenAI API calls with token protection
+ * - OpenAI API proxy for secure token handling
+ * - Socket.IO server for real-time multiplayer chess
  */
 
 import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import cors from 'cors';
 import { OpenAI } from 'openai';
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 
 // 🔒 Secure OpenAI API key - NEVER expose to frontend
@@ -24,18 +28,209 @@ const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
 
-// Middleware
+// CORS configuration
+const CORS_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://*.seaverse.com',
+  'https://deepm8-frontend.vercel.app',
+  'https://*.vercel.app'
+];
+
+// Express middleware
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'https://*.seaverse.com',
-    'https://deepm8-frontend.vercel.app',  // ✅ Added Vercel frontend
-    'https://*.vercel.app'  // ✅ Allow all Vercel preview deployments
-  ],
+  origin: CORS_ORIGINS,
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
+
+// Socket.IO server with CORS
+const io = new Server(httpServer, {
+  cors: {
+    origin: CORS_ORIGINS,
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling']
+});
+
+// ==================== MULTIPLAYER GAME STATE ====================
+const matchmakingQueue = new Map(); // userId -> { socketId, userName, elo, timeControl, joinedAt }
+const activeMatches = new Map();    // matchId -> { id, players: { white, black }, moves, startedAt }
+const playerToMatch = new Map();    // socketId -> matchId
+
+// ==================== SOCKET.IO EVENT HANDLERS ====================
+
+io.on('connection', (socket) => {
+  const { userId, userName } = socket.handshake.auth;
+  console.log(`✅ Player connected: ${userName} (${socket.id})`);
+
+  // Find Match
+  socket.on('find-match', ({ playerElo, timeControl }, callback) => {
+    console.log(`🔍 ${userName} searching for match (ELO: ${playerElo}, ${timeControl})`);
+
+    // Check if already in a match
+    if (playerToMatch.has(socket.id)) {
+      callback({ success: false, error: 'Already in a match' });
+      return;
+    }
+
+    // Try to find an opponent in queue
+    let opponentEntry = null;
+    for (const [opponentUserId, queueData] of matchmakingQueue.entries()) {
+      if (queueData.timeControl === timeControl && Math.abs(queueData.elo - playerElo) <= 200) {
+        opponentEntry = { userId: opponentUserId, ...queueData };
+        matchmakingQueue.delete(opponentUserId);
+        break;
+      }
+    }
+
+    if (opponentEntry) {
+      // Match found! Create game room
+      const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const isWhite = Math.random() < 0.5;
+
+      const match = {
+        id: matchId,
+        players: {
+          white: isWhite ? { userId, userName, socketId: socket.id, elo: playerElo } : { userId: opponentEntry.userId, userName: opponentEntry.userName, socketId: opponentEntry.socketId, elo: opponentEntry.elo },
+          black: isWhite ? { userId: opponentEntry.userId, userName: opponentEntry.userName, socketId: opponentEntry.socketId, elo: opponentEntry.elo } : { userId, userName, socketId: socket.id, elo: playerElo }
+        },
+        moves: [],
+        startedAt: Date.now(),
+        timeControl
+      };
+
+      activeMatches.set(matchId, match);
+      playerToMatch.set(socket.id, matchId);
+      playerToMatch.set(opponentEntry.socketId, matchId);
+
+      // Join socket room
+      socket.join(matchId);
+      io.sockets.sockets.get(opponentEntry.socketId)?.join(matchId);
+
+      console.log(`✨ Match created: ${matchId} (${match.players.white.userName} vs ${match.players.black.userName})`);
+
+      // Notify both players
+      io.to(matchId).emit('match-found', match);
+      io.to(matchId).emit('game-start', match);
+
+      callback({ success: true, match });
+    } else {
+      // No opponent found, add to queue
+      matchmakingQueue.set(userId, {
+        socketId: socket.id,
+        userName,
+        elo: playerElo,
+        timeControl,
+        joinedAt: Date.now()
+      });
+
+      console.log(`⏳ ${userName} added to queue. Queue size: ${matchmakingQueue.size}`);
+      callback({ success: true, match: null });
+    }
+  });
+
+  // Cancel Matchmaking
+  socket.on('cancel-matchmaking', (callback) => {
+    const { userId } = socket.handshake.auth;
+    if (matchmakingQueue.has(userId)) {
+      matchmakingQueue.delete(userId);
+      console.log(`❌ ${userName} cancelled matchmaking`);
+      callback({ success: true });
+    } else {
+      callback({ success: false, error: 'Not in matchmaking queue' });
+    }
+  });
+
+  // Chess Move
+  socket.on('chess-move', ({ matchId, move }) => {
+    const match = activeMatches.get(matchId);
+    if (!match) {
+      console.error(`❌ Match ${matchId} not found`);
+      return;
+    }
+
+    match.moves.push(move);
+    console.log(`♟️  Move in ${matchId}: ${move.notation} (${match.moves.length} moves)`);
+
+    // Broadcast to opponent only
+    socket.to(matchId).emit('chess-move', move);
+  });
+
+  // Chat Message
+  socket.on('chat-message', ({ matchId, message }) => {
+    const match = activeMatches.get(matchId);
+    if (!match) return;
+
+    const chatMessage = {
+      sender: userName,
+      message,
+      timestamp: Date.now()
+    };
+
+    io.to(matchId).emit('chat-message', chatMessage);
+  });
+
+  // Game End
+  socket.on('game-end', ({ matchId, winner, reason }) => {
+    const match = activeMatches.get(matchId);
+    if (!match) return;
+
+    console.log(`🏁 Game ended: ${matchId} - Winner: ${winner} (${reason})`);
+
+    // Notify both players
+    io.to(matchId).emit('game-end', { winner, reason });
+
+    // Cleanup
+    activeMatches.delete(matchId);
+    playerToMatch.delete(socket.id);
+    const opponentSocketId = winner === 'white' ? match.players.black.socketId : match.players.white.socketId;
+    playerToMatch.delete(opponentSocketId);
+  });
+
+  // Leave Match
+  socket.on('leave-match', ({ matchId }, callback) => {
+    const match = activeMatches.get(matchId);
+    if (!match) {
+      callback({ success: false, error: 'Match not found' });
+      return;
+    }
+
+    console.log(`👋 ${userName} left match ${matchId}`);
+
+    // Notify opponent
+    socket.to(matchId).emit('opponent-disconnected');
+
+    // Cleanup
+    socket.leave(matchId);
+    playerToMatch.delete(socket.id);
+
+    callback({ success: true });
+  });
+
+  // Disconnect
+  socket.on('disconnect', (reason) => {
+    console.log(`❌ ${userName} disconnected (${reason})`);
+
+    // Remove from matchmaking queue
+    const { userId } = socket.handshake.auth;
+    matchmakingQueue.delete(userId);
+
+    // Handle active match
+    const matchId = playerToMatch.get(socket.id);
+    if (matchId) {
+      const match = activeMatches.get(matchId);
+      if (match) {
+        socket.to(matchId).emit('opponent-disconnected');
+        console.log(`⚠️  ${userName} disconnected from active match ${matchId}`);
+      }
+      playerToMatch.delete(socket.id);
+    }
+  });
+});
+
+// ==================== HTTP ENDPOINTS ====================
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -185,16 +380,18 @@ app.use((req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server (use httpServer instead of app)
+httpServer.listen(PORT, () => {
   console.log('🚀 DeepM8 Backend API Server');
-  console.log(`📡 Server running on http://localhost:${PORT}`);
+  console.log(`📡 HTTP Server running on http://localhost:${PORT}`);
+  console.log(`🔌 Socket.IO Server ready for multiplayer`);
   console.log(`🔒 OpenAI API Key: ***${OPENAI_API_KEY.slice(-4)}`);
   console.log(`⏰ Started at: ${new Date().toISOString()}`);
   console.log('');
   console.log('Available endpoints:');
   console.log('  GET  /health       - Health check');
   console.log('  POST /api/chat     - Chat completions');
+  console.log('  WS   /socket.io    - Multiplayer websocket');
 });
 
 // Graceful shutdown
