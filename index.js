@@ -9,6 +9,12 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { OpenAI } from 'openai';
+import {
+  checkAvailability,
+  setUsername,
+  findByUserId,
+  validateUsernameFormat
+} from './username-store.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -31,6 +37,7 @@ const openai = new OpenAI({
 // CORS configuration
 const CORS_ORIGINS = [
   'http://localhost:5173',
+  'http://localhost:9001',
   'http://localhost:3000',
   'https://*.seaverse.com',
   'https://deepm8-frontend.vercel.app',
@@ -372,6 +379,83 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/users/check-username
+ * Live uniqueness check (used by the frontend debounce).
+ *
+ * Body: { username: string, userId?: string }
+ * Returns: { available: boolean, username?: string, reason?: string }
+ */
+app.post('/api/users/check-username', (req, res) => {
+  const { username, userId } = req.body || {};
+  if (typeof username !== 'string') {
+    return res.status(400).json({
+      available: false,
+      error: 'Invalid request',
+      message: 'username is required'
+    });
+  }
+
+  const format = validateUsernameFormat(username);
+  if (!format.ok) {
+    return res.json({ available: false, reason: format.error });
+  }
+
+  const result = checkAvailability(username, userId);
+  console.log(`📛 check-username "${String(username).trim()}" → available=${result.available}`);
+  res.json({
+    available: result.available,
+    username: String(username).trim(),
+    reason: result.reason
+  });
+});
+
+/**
+ * POST /api/users/set-username
+ * Reserve a unique username for a user.
+ *
+ * Body: { userId: string, username: string }
+ */
+app.post('/api/users/set-username', (req, res) => {
+  const { userId, username } = req.body || {};
+  if (typeof userId !== 'string' || typeof username !== 'string') {
+    return res.status(400).json({
+      ok: false,
+      error: 'Invalid request',
+      message: 'userId and username are required'
+    });
+  }
+
+  const result = setUsername(userId, username);
+  if (!result.ok) {
+    const taken = result.error && result.error.includes('en uso');
+    return res.status(taken ? 409 : 400).json({
+      ok: false,
+      error: taken ? 'Username taken' : 'Invalid username',
+      message: result.error
+    });
+  }
+
+  console.log(`✅ Username set: ${result.record.username} (${userId})`);
+  res.json({ ok: true, username: result.record.username, record: result.record });
+});
+
+/**
+ * GET /api/users/username?userId=
+ * Used after login to decide if the username step is still required.
+ */
+app.get('/api/users/username', (req, res) => {
+  const userId = req.query.userId;
+  if (!userId || typeof userId !== 'string') {
+    return res.status(400).json({ error: 'userId query param is required' });
+  }
+  const record = findByUserId(userId);
+  if (!record) {
+    return res.json({ username: null });
+  }
+  res.json({ username: record.username, record });
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -389,9 +473,12 @@ httpServer.listen(PORT, () => {
   console.log(`⏰ Started at: ${new Date().toISOString()}`);
   console.log('');
   console.log('Available endpoints:');
-  console.log('  GET  /health       - Health check');
-  console.log('  POST /api/chat     - Chat completions');
-  console.log('  WS   /socket.io    - Multiplayer websocket');
+  console.log('  GET  /health                      - Health check');
+  console.log('  POST /api/chat                    - Chat completions');
+  console.log('  POST /api/users/check-username    - Username availability');
+  console.log('  POST /api/users/set-username      - Reserve username');
+  console.log('  GET  /api/users/username          - Lookup by userId');
+  console.log('  WS   /socket.io                   - Multiplayer websocket');
 });
 
 // Graceful shutdown

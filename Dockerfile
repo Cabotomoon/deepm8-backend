@@ -11,7 +11,7 @@ COPY package*.json ./
 RUN npm install --omit=dev && npm cache clean --force
 
 # Copy application source
-COPY index.js ./
+COPY index.js username-store.js ./
 
 # Railway sets PORT automatically, expose default
 EXPOSE 3001
