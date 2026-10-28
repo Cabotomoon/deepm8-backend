@@ -11,6 +11,9 @@ logs/
 *.log
 npm-debug.log*
 
+# Username store (runtime)
+data/
+
 # OS files
 .DS_Store
 Thumbs.db
