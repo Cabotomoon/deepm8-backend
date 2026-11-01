@@ -49,7 +49,7 @@ Railway Build Process:
    - En el dashboard de Railway, ve a **Variables**
    - Agrega estas variables:
      ```
-     OPENAI_API_KEY=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
+     OPENAI_API_KEY=YOUR_OPENAI_API_KEY
      NODE_ENV=production
      ```
    - **Nota**: `PORT` se configura automáticamente por Railway
